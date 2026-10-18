@@ -58,15 +58,22 @@ Scripts/test-sanitizers.sh thread
 Scripts/test-sanitizers.sh address
 Scripts/build-python-distributions.sh Artifacts/python-distributions
 Scripts/build-documentation.sh Artifacts/documentation
+Scripts/build-documentation.sh --site Artifacts/documentation-site
 ```
 
 Artifact output directories must be absent or empty. The Python build uses temporary environments and pinned build dependencies from [`build-requirements.txt`](../build-requirements.txt). Each distribution is installed and checked outside the checkout. These build tools are not dependencies of the installed CLI.
 
-## Documentation artifacts
+## Documentation on GitHub Pages
 
-The DocC catalog covers the public API and integration lifecycle. The [Build documentation workflow](../.github/workflows/documentation.yml) builds it on demand. Download its artifact from the run to obtain an Xcode-readable `.doccarchive.zip` and a static documentation bundle.
+The [DocC site](https://kylehughes.github.io/InternalAppUpdates/) covers the public API and integration lifecycle. It follows Coalesced's deployment model: publishing a package release deploys that release's documentation, and a manual **Documentation** workflow can rebuild and redeploy the latest published release tag.
 
-Documentation stays in this private repository's workflow artifacts and releases. There is no Pages deployment or public documentation site.
+The repository and release attachments remain private; the GitHub Pages site is public. CI retains the Xcode-readable `.doccarchive.zip` and static documentation ZIP as downloadable artifacts.
+
+GitHub Pages uses **GitHub Actions** as its publishing source. The `github-pages` environment allows the `main` branch for release runs and version tags for manual deployments. Build jobs have read permissions. Only the separate deployment job receives `pages: write` and `id-token: write`.
+
+Both deployment paths verify that the version is a published, non-prerelease GitHub release, that it is still the latest release, and that the remote tag resolves to the certified commit. The manual workflow checks this before building and again before deploying. Both paths share one deployment concurrency group so they cannot deploy simultaneously.
+
+To redeploy, open **Actions > Documentation > Run workflow** and select the latest release's tag, such as `0.1.1`. Selecting a branch, draft, prerelease, older release, or a mismatched tag fails validation. The static site uses the `/InternalAppUpdates/` hosting path and redirects its root to the module documentation.
 
 ## Release a package version
 
@@ -76,15 +83,15 @@ The [Release workflow](../.github/workflows/release.yml) creates one Git tag and
 2. Open **Actions > Release > Run workflow**, select `main`, enter that version, and leave **dry_run** enabled. Optional notes become the release body; omitting them requests generated notes when publishing.
 3. Review the exact commit SHA, support audit, and retained release-candidate artifact. The candidate manifest records the repository, version, SHA, filenames, sizes, and SHA-256 digests.
 4. Dispatch the workflow with **dry_run** disabled to publish. It audits and builds the selected commit again. If `main` changes, review and dry-run the new candidate before publishing it.
-5. Confirm the release tag resolves to the intended commit, all four assets are present, and the publication receipt reports `published`.
+5. Confirm the release tag resolves to the intended commit, all four assets are present, the publication receipt reports `published`, and **Deploy release documentation** succeeds.
 
-Only the final publishing job has write permission. It downloads the certified artifacts, checks them again, creates a draft release, uploads and verifies each asset's bytes, and publishes the completed release. Package builds and installations run in read-only jobs.
+Only the publishing job has repository contents write permission. It downloads the certified artifacts, checks them again, creates a draft release, uploads and verifies each asset's bytes, and publishes the completed release. A separate job deploys the certified documentation site to Pages after publication. Package builds and installations run in read-only jobs; dry runs do not publish releases or deploy Pages.
 
 Dry runs use read-only credentials. GitHub limits [draft-release visibility](https://docs.github.com/en/rest/releases/releases#list-releases) to callers with push access, so the publishing job repeats the remote checks with its write token before making changes.
 
 Each release contains a wheel, a source distribution, a DocC archive, and a static documentation bundle. Candidate manifests and publication receipts remain workflow artifacts for 90 days. Download them if longer retention is needed.
 
-The existing `0.1.0` tag predates this workflow. It remains at its original commit; the next release requires a version bump. Dispatching `0.1.0` for a different commit fails validation.
+The existing `0.1.0` tag predates this workflow and remains at its original commit. Dispatching `0.1.0` for a different commit fails validation.
 
 ## Recover a failed publication
 
@@ -97,5 +104,7 @@ A new dispatch can also reuse the candidate: enter the original workflow run's n
 A full workflow rerun without a retained candidate rebuilds the archives. ZIP and distribution bytes can differ between builds even at the same commit. If existing assets differ, publication stops: recover the original retained candidate instead of replacing published bytes. Conflicting tags, notes, unexpected assets, or a newer stable version also stop publication and need investigation.
 
 If the candidate artifact has expired, do not assume a fresh build is byte-identical. Preserve the existing release state and prepare a new version if the original bytes cannot be recovered.
+
+If release publication succeeds but Pages deployment fails, the release remains published. Re-run the failed deployment job while its Pages artifact is retained (seven days), or dispatch **Documentation** from that release tag. The latest-release check prevents an older retry from replacing newer documentation.
 
 CI and package releases do not establish over-the-air installation acceptance. Follow the [physical-device procedure](device-verification.md) for signing, cellular access, replacement, and data preservation.

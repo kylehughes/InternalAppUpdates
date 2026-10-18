@@ -86,6 +86,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      pages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,6 +96,8 @@ jobs:
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
           python-version: '3.15'
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Select release Apple toolchain
         if: inputs.candidate_run_id == ''
         timeout-minutes: 2
@@ -105,7 +108,7 @@ jobs:
         env:
           INTERNAL_APP_UPDATES_PYTHON: python
         run: Scripts/build-python-distributions.sh "$RUNNER_TEMP/python-distributions"
-      - name: Build DocC archive and private site bundle
+      - name: Build DocC archive and documentation site
         if: inputs.candidate_run_id == ''
         timeout-minutes: 15
         run: Scripts/build-documentation.sh "$RUNNER_TEMP/documentation"
@@ -168,6 +171,22 @@ jobs:
           path: ${{ runner.temp }}/release-candidate
           if-no-files-found: error
           retention-days: 90
+      - name: Extract certified documentation site
+        timeout-minutes: 2
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          unzip -q "$RUNNER_TEMP/release-candidate/InternalAppUpdates-$RELEASE_VERSION-documentation.zip" \
+            -d "$RUNNER_TEMP/documentation-for-pages"
+          site="$RUNNER_TEMP/documentation-for-pages/InternalAppUpdates-documentation"
+          test -f "$site/index.html"
+          test -f "$site/documentation/internalappupdates/index.html"
+          test -f "$site/data/documentation/internalappupdates.json"
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/documentation-for-pages/InternalAppUpdates-documentation
+          retention-days: 7
 
   verify:
     name: Verify downloaded candidate
@@ -254,3 +273,36 @@ jobs:
           path: ${{ runner.temp }}/publication-receipt.json
           if-no-files-found: warn
           retention-days: 90
+
+  deploy_documentation:
+    name: Deploy release documentation
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-documentation-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+      pages: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout certified release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify latest release documentation target
+        timeout-minutes: 2
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          VERSION: ${{ inputs.version }}
+        run: python3 Scripts/check-release-documentation-target.py "$VERSION" "$SHA"
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

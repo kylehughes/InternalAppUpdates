@@ -39,12 +39,14 @@ The publisher's signing validation and archive export require macOS. The Python 
 
 ## Documentation
 
+[Read the DocC documentation on GitHub Pages.](https://kylehughes.github.io/InternalAppUpdates/)
+
 - [Swift package integration](Documents/integration.md): ownership, scene activity, SwiftUI, UIKit, and customization.
 - [Hosting](Documents/hosting.md): Tailscale Serve, HTTPS endpoints, caching, and installer access.
 - [Deployment](Documents/deployment.md): publication reports, upload order, verification, and retries.
 - [Feed protocol](Documents/feed-protocol.md): the JSON and installation-manifest contracts.
 - [Device verification](Documents/device-verification.md): verify installation and data preservation on a physical device.
-- [CI and package releases](Documents/delivery.md): supported test configurations, private documentation artifacts, and release procedures.
+- [CI and package releases](Documents/delivery.md): supported test configurations, documentation deployment, and release procedures.
 
 ## Installation
 
@@ -52,7 +54,7 @@ The publisher's signing validation and archive export require macOS. The Python 
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kylehughes/InternalAppUpdates.git", from: "0.1.0"),
+    .package(url: "https://github.com/kylehughes/InternalAppUpdates.git", from: "0.1.1"),
 ]
 ```
 
@@ -279,9 +281,9 @@ Scripts/check.sh
 
 Set `INTERNAL_APP_UPDATES_PYTHON` if your default Python is older than 3.11. The [validation record](Documents/validation.md) documents completed checks and remaining device acceptance work.
 
-CI also checks both declared Apple toolchains in Debug and Release, runs iOS simulator tests, tests Python on macOS and Linux, builds installable distributions and DocC, and runs selected sanitizer checks. The manual release workflow defaults to a dry run and publishes versioned packages and documentation as private GitHub release assets. See [CI and package releases](Documents/delivery.md) for the matrix, local commands, and release recovery.
+CI also checks both declared Apple toolchains in Debug and Release, runs iOS simulator tests, tests Python on macOS and Linux, builds installable distributions and DocC, and runs selected sanitizer checks. The manual release workflow defaults to a dry run. Publishing a release attaches the packages and documentation archives to the private GitHub release, then deploys its DocC site to GitHub Pages. See [CI and package releases](Documents/delivery.md) for the matrix, local commands, and release recovery.
 
-For agent-assisted integration and publication, use [publishing-internal-app-updates](Skills/publishing-internal-app-updates/SKILL.md). Design decisions are recorded in [Static Feed and Native Installer](Documents/0001-static-feed-and-native-installer.md), [External Deployment Scripts](Documents/0002-external-deployment-scripts.md), [Operation Identity and Input Boundaries](Documents/0003-operation-identity-and-input-boundaries.md), and [CI and Private Package Releases](Documents/0004-ci-and-private-releases.md).
+For agent-assisted integration and publication, use [publishing-internal-app-updates](Skills/publishing-internal-app-updates/SKILL.md). Design decisions are recorded in [Static Feed and Native Installer](Documents/0001-static-feed-and-native-installer.md), [External Deployment Scripts](Documents/0002-external-deployment-scripts.md), [Operation Identity and Input Boundaries](Documents/0003-operation-identity-and-input-boundaries.md), [CI and Private Package Releases](Documents/0004-ci-and-private-releases.md), and [Release Documentation on GitHub Pages](Documents/0005-release-documentation-on-github-pages.md).
 
 ## Contributions
 

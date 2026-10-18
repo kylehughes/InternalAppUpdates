@@ -1,6 +1,6 @@
 # CI and private package releases
 
-Status: Accepted
+Status: Accepted; documentation visibility superseded by [ADR 0005](0005-release-documentation-on-github-pages.md).
 
 Date: 2026-10-18
 
