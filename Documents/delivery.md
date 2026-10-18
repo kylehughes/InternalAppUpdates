@@ -73,7 +73,7 @@ GitHub Pages uses **GitHub Actions** as its publishing source. The `github-pages
 
 Both deployment paths verify that the version is a published, non-prerelease GitHub release, that it is still the latest release, and that the remote tag resolves to the certified commit. The manual workflow checks this before building and again before deploying. Both paths share one deployment concurrency group so they cannot deploy simultaneously.
 
-To redeploy, open **Actions > Documentation > Run workflow** and select the latest release's tag, such as `0.1.1`. Selecting a branch, draft, prerelease, older release, or a mismatched tag fails validation. The static site uses the `/InternalAppUpdates/` hosting path and redirects its root to the module documentation.
+To redeploy, open **Actions > Documentation > Run workflow** and select the latest release's tag, such as `1.0.0`. Selecting a branch, draft, prerelease, older release, or a mismatched tag fails validation. The static site uses the `/InternalAppUpdates/` hosting path and redirects its root to the module documentation.
 
 ## Release a package version
 
