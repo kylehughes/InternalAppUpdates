@@ -1,0 +1,4 @@
+interface:
+  display_name: "Publish Internal App Updates"
+  short_description: "Deliver signed internal iOS app updates over HTTPS"
+  default_prompt: "Use $publishing-internal-app-updates to publish a new internal iOS build to our update feed."

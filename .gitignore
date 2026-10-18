@@ -1,0 +1,17 @@
+.build/
+build/
+dist/
+.swiftpm/
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+Artifacts/
+Site/
+*.xcuserstate
+xcuserdata/
+.env
+*.log
+DerivedData/

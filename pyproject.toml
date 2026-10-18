@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "internal-app-updates"
+version = "0.1.0"
+description = "Publish signed iOS development builds to a portable HTTPS update feed"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+internal-app-updates = "internal_app_updates.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["tools"]
+include = ["internal_app_updates*"]

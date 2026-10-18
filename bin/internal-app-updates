@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Run the repository's CLI without installing it."""
+from pathlib import Path
+import os
+import shutil
+import sys
+
+if sys.version_info < (3, 11):
+    # macOS can put its older /usr/bin/python3 ahead of an installed modern Python.
+    for minor in range(20, 10, -1):
+        executable = shutil.which(f"python3.{minor}")
+        if executable:
+            os.execv(executable, [executable, str(Path(__file__).resolve()), *sys.argv[1:]])
+    raise SystemExit("InternalAppUpdates requires Python 3.11 or newer. Install it or use a Python 3.11+ virtual environment.")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+from internal_app_updates.cli import main
+
+raise SystemExit(main())
