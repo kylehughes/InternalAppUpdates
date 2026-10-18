@@ -10,7 +10,9 @@ from pathlib import Path
 import plistlib
 import re
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 import zipfile
 
@@ -119,12 +121,14 @@ class PublishingTests(unittest.TestCase):
                                 compression=zipfile.ZIP_DEFLATED)
         self.corrupt_member(ipa, "Payload/Folder.app/resource.bin")
         output = StringIO()
-        with redirect_stdout(output):
+        with patch("internal_app_updates.publishing.os.uname", return_value=SimpleNamespace(sysname="Darwin")), \
+                patch("internal_app_updates.publishing.subprocess.run") as run, redirect_stdout(output):
             result = cli.main(["publish", "--json", "--ipa", str(ipa),
                                "--output", str(self.root / "corrupt-site"),
                                "--base-url", "https://updates.example"])
         self.assertEqual(result, 1)
         self.assertIn("extract IPA archive", json.loads(output.getvalue())["error"])
+        run.assert_not_called()
 
     def test_failure_before_assets_does_not_advance_feed(self):
         output = self.root / "site"
