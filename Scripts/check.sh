@@ -6,6 +6,9 @@ if ! "$update_python" -c 'import sys; sys.exit(sys.version_info < (3, 11))'; the
   echo 'Set INTERNAL_APP_UPDATES_PYTHON to a Python 3.11 or newer interpreter.' >&2
   exit 1
 fi
+"$update_python" Scripts/check-support.py
+Scripts/check-workflows.sh
+"$update_python" -m unittest discover -s Scripts/tests -v
 swift test
 Scripts/check-invariants.sh
 PYTHONPATH=tools "$update_python" -m unittest discover -s tools/tests -v

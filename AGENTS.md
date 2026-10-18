@@ -27,7 +27,7 @@ Set `INTERNAL_APP_UPDATES_PYTHON` if `python3` is not a supported interpreter:
 INTERNAL_APP_UPDATES_PYTHON=python3.11 Scripts/check.sh
 ```
 
-The script runs both test suites, regenerates the sample project, and builds the unsigned iOS Simulator app. For focused iteration:
+The script validates support declarations and workflows, runs delivery-script and product test suites, regenerates the sample project, and builds the unsigned iOS Simulator app. See [delivery.md](Documents/delivery.md) for the CI matrix, additional checks, and private package releases. For focused iteration:
 
 ```sh
 swift test

@@ -1,19 +1,208 @@
-name: Check
+name: CI
+
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
-    runs-on: macos-latest
+  support:
+    name: CI / Support declaration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    outputs:
+      apple-matrix: ${{ steps.support.outputs.apple-matrix }}
+      python-matrix: ${{ steps.support.outputs.python-matrix }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Show selected toolchain
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          persist-credentials: false
+      - id: support
+        name: Validate support declaration
+        timeout-minutes: 2
+        run: python3 Scripts/check-support.py --github-output
+      - name: Lint workflows
+        timeout-minutes: 3
+        run: Scripts/check-workflows.sh
+
+  apple:
+    name: CI / Apple ${{ matrix.xcode }} ${{ matrix.configuration }}
+    needs: support
+    runs-on: macos-26
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.support.outputs.apple-matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          persist-credentials: false
+      - name: Validate support declaration
+        timeout-minutes: 2
+        run: python3 Scripts/check-support.py
+      - name: Select Apple toolchain
+        timeout-minutes: 2
+        env:
+          XCODE_LANE: ${{ matrix.xcode }}
+        run: Scripts/select-apple-toolchain.sh "$XCODE_LANE"
+      - name: Swift tests and invariants
+        timeout-minutes: 12
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
         run: |
-          xcodebuild -version
-          swift --version
-          python3 --version
-      - name: Check package, publisher, and sample
-        run: Scripts/check.sh
+          if [[ "$CONFIGURATION" == Release ]]; then swift test -c release; else swift test; fi
+          Scripts/check-invariants.sh
+      - name: iOS sample and package tests
+        if: matrix.configuration == 'Debug' && matrix.xcode == '26.6'
+        timeout-minutes: 18
+        run: Scripts/test-ios.sh
+
+  python:
+    name: CI / Python ${{ matrix.os }} ${{ matrix.python }}
+    needs: support
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+        python: ${{ fromJSON(needs.support.outputs.python-matrix).python }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        timeout-minutes: 3
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Publisher and support-script tests
+        timeout-minutes: 8
+        run: |
+          PYTHONPATH=tools python -m unittest discover -s tools/tests -v
+          python -m unittest discover -s Scripts/tests -v
+
+  distributions:
+    name: CI / Python distributions
+    needs: support
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        timeout-minutes: 3
+        with:
+          python-version: '3.11'
+      - name: Build and validate distributions
+        timeout-minutes: 10
+        run: Scripts/build-python-distributions.sh Artifacts/python-distributions
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        timeout-minutes: 3
+        with:
+          name: python-distributions
+          path: Artifacts/python-distributions
+          if-no-files-found: error
+
+  documentation:
+    name: CI / Documentation archive
+    needs: support
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          persist-credentials: false
+      - name: Select current Apple toolchain
+        timeout-minutes: 2
+        run: Scripts/select-apple-toolchain.sh 26.6
+      - name: Build documentation archives
+        timeout-minutes: 14
+        run: Scripts/build-documentation.sh Artifacts/documentation
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        timeout-minutes: 3
+        with:
+          name: documentation-archives
+          path: |
+            Artifacts/documentation/InternalAppUpdates.doccarchive.zip
+            Artifacts/documentation/InternalAppUpdates-documentation.zip
+          if-no-files-found: error
+
+  coverage:
+    name: CI / Coverage
+    needs: support
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          persist-credentials: false
+      - name: Select current Apple toolchain
+        timeout-minutes: 2
+        run: Scripts/select-apple-toolchain.sh 26.6
+      - name: Produce coverage report
+        timeout-minutes: 14
+        run: python3 Scripts/check-coverage.py
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        timeout-minutes: 3
+        with:
+          name: coverage-report
+          path: Artifacts/coverage.json
+          if-no-files-found: error
+
+  tsan:
+    name: CI / Apple TSan
+    needs: support
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          persist-credentials: false
+      - name: Select current Apple toolchain
+        timeout-minutes: 2
+        run: Scripts/select-apple-toolchain.sh 26.6
+      - name: Controller and loader tests under TSan
+        timeout-minutes: 20
+        run: Scripts/test-sanitizers.sh thread
+
+  gate:
+    name: CI gate
+    if: always()
+    needs: [support, apple, python, distributions, documentation, coverage, tsan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Require successful checks
+        env:
+          SUPPORT: ${{ needs.support.result }}
+          APPLE: ${{ needs.apple.result }}
+          PYTHON: ${{ needs.python.result }}
+          DISTRIBUTIONS: ${{ needs.distributions.result }}
+          DOCUMENTATION: ${{ needs.documentation.result }}
+          COVERAGE: ${{ needs.coverage.result }}
+          TSAN: ${{ needs.tsan.result }}
+        run: |
+          for result in "$SUPPORT" "$APPLE" "$PYTHON" "$DISTRIBUTIONS" "$DOCUMENTATION" "$COVERAGE" "$TSAN"; do
+            [[ "$result" == success ]] || exit 1
+          done

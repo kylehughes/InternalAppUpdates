@@ -1,7 +1,7 @@
 # Internal App Updates
 
 [![Provenance: Software Factory](https://img.shields.io/badge/Provenance-Software_Factory-007AFF)](#provenance)
-[![Check](https://github.com/kylehughes/InternalAppUpdates/actions/workflows/ci.yml/badge.svg)](https://github.com/kylehughes/InternalAppUpdates/actions/workflows/ci.yml)
+[![CI](https://github.com/kylehughes/InternalAppUpdates/actions/workflows/ci.yml/badge.svg)](https://github.com/kylehughes/InternalAppUpdates/actions/workflows/ci.yml)
 
 *Publish signed internal iOS builds, share installation links, and offer updates inside your app.*
 
@@ -44,6 +44,7 @@ The publisher's signing validation and archive export require macOS. The Python 
 - [Deployment](Documents/deployment.md): publication reports, upload order, verification, and retries.
 - [Feed protocol](Documents/feed-protocol.md): the JSON and installation-manifest contracts.
 - [Device verification](Documents/device-verification.md): verify installation and data preservation on a physical device.
+- [CI and package releases](Documents/delivery.md): supported test configurations, private documentation artifacts, and release procedures.
 
 ## Installation
 
@@ -270,7 +271,7 @@ A device already downloading the old build can still finish.
 
 Open the [sample app](Examples/InternalAppUpdatesDemo/InternalAppUpdatesDemo.xcodeproj) to try manual checks, automatic presentation, and a saved note for testing data preservation. Select your signing team and app identifier before installing it on a device.
 
-Run the package tests, Python tests, and unsigned sample build:
+Run the support checks, workflow lint, test suites, and unsigned sample build:
 
 ```sh
 Scripts/check.sh
@@ -278,7 +279,9 @@ Scripts/check.sh
 
 Set `INTERNAL_APP_UPDATES_PYTHON` if your default Python is older than 3.11. The [validation record](Documents/validation.md) documents completed checks and remaining device acceptance work.
 
-For agent-assisted integration and publication, use [publishing-internal-app-updates](Skills/publishing-internal-app-updates/SKILL.md). Design decisions are recorded in [Static Feed and Native Installer](Documents/0001-static-feed-and-native-installer.md), [External Deployment Scripts](Documents/0002-external-deployment-scripts.md), and [Operation Identity and Input Boundaries](Documents/0003-operation-identity-and-input-boundaries.md).
+CI also checks both declared Apple toolchains in Debug and Release, runs iOS simulator tests, tests Python on macOS and Linux, builds installable distributions and DocC, and runs selected sanitizer checks. The manual release workflow defaults to a dry run and publishes versioned packages and documentation as private GitHub release assets. See [CI and package releases](Documents/delivery.md) for the matrix, local commands, and release recovery.
+
+For agent-assisted integration and publication, use [publishing-internal-app-updates](Skills/publishing-internal-app-updates/SKILL.md). Design decisions are recorded in [Static Feed and Native Installer](Documents/0001-static-feed-and-native-installer.md), [External Deployment Scripts](Documents/0002-external-deployment-scripts.md), [Operation Identity and Input Boundaries](Documents/0003-operation-identity-and-input-boundaries.md), and [CI and Private Package Releases](Documents/0004-ci-and-private-releases.md).
 
 ## Contributions
 

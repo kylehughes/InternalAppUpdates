@@ -1,0 +1,31 @@
+{
+  "swift": {
+    "toolsVersion": "6.3",
+    "languageMode": "6"
+  },
+  "platforms": {
+    "iOS": "16",
+    "macOS": "13"
+  },
+  "appleToolchains": [
+    {
+      "xcode": "26.5",
+      "build": "17F42",
+      "swift": "6.3.2",
+      "developerDirectories": [
+        "/Applications/Xcode_26.5.app/Contents/Developer",
+        "/Applications/Xcode-26.5.app/Contents/Developer"
+      ]
+    },
+    {
+      "xcode": "26.6",
+      "build": "17F113",
+      "swift": "6.3.3",
+      "developerDirectories": [
+        "/Applications/Xcode_26.6.0.app/Contents/Developer",
+        "/Applications/Xcode-26.6.0.app/Contents/Developer"
+      ]
+    }
+  ],
+  "pythonVersions": ["3.11", "3.15"]
+}

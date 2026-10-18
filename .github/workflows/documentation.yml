@@ -1,0 +1,50 @@
+name: Build documentation
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to document
+        required: true
+        default: main
+        type: string
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to document
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  documentation:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - name: Select current Apple toolchain
+        timeout-minutes: 2
+        run: Scripts/select-apple-toolchain.sh 26.6
+      - name: Build DocC archives
+        timeout-minutes: 14
+        run: Scripts/build-documentation.sh Artifacts/documentation
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        timeout-minutes: 3
+        with:
+          name: InternalAppUpdates-documentation
+          path: Artifacts/documentation
+          if-no-files-found: error

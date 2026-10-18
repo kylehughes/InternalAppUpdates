@@ -1,0 +1,256 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Canonical stable bare SemVer matching pyproject.toml
+        required: true
+        type: string
+      notes:
+        description: Optional release notes (generated when omitted)
+        required: false
+        type: string
+      dry_run:
+        description: Validate and build without publishing
+        required: true
+        default: true
+        type: boolean
+      candidate_run_id:
+        description: Optional prior Release workflow run ID whose exact candidate should be reused
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.15'
+      - name: Validate exact release candidate
+        timeout-minutes: 3
+        env:
+          CERTIFIED_SHA: ${{ github.sha }}
+          DISPATCH_REF: ${{ github.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          [[ "$DISPATCH_REF" == refs/heads/main ]] || {
+            echo 'Release dispatches must select the main branch.' >&2
+            exit 1
+          }
+          if [[ -n "$CANDIDATE_RUN_ID" && ! "$CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo 'candidate_run_id must be a positive numeric GitHub Actions run ID.' >&2
+            exit 1
+          fi
+          python Scripts/release.py preflight \
+            --repository "$GITHUB_REPOSITORY" \
+            --version "$RELEASE_VERSION" \
+            --sha "$CERTIFIED_SHA"
+
+  support-audit:
+    name: Exact-candidate support audit
+    needs: preflight
+    uses: ./.github/workflows/support-audit.yml
+    with:
+      ref: ${{ github.sha }}
+    permissions:
+      contents: read
+
+  artifacts:
+    name: Build release artifacts
+    needs: preflight
+    runs-on: macos-26
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.15'
+      - name: Select release Apple toolchain
+        if: inputs.candidate_run_id == ''
+        timeout-minutes: 2
+        run: Scripts/select-apple-toolchain.sh 26.6
+      - name: Build Python distributions
+        if: inputs.candidate_run_id == ''
+        timeout-minutes: 12
+        env:
+          INTERNAL_APP_UPDATES_PYTHON: python
+        run: Scripts/build-python-distributions.sh "$RUNNER_TEMP/python-distributions"
+      - name: Build DocC archive and private site bundle
+        if: inputs.candidate_run_id == ''
+        timeout-minutes: 15
+        run: Scripts/build-documentation.sh "$RUNNER_TEMP/documentation"
+      - name: Assemble and certify candidate
+        if: inputs.candidate_run_id == ''
+        timeout-minutes: 2
+        env:
+          CERTIFIED_SHA: ${{ github.sha }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          candidate="$RUNNER_TEMP/release-candidate"
+          mkdir "$candidate"
+          cp "$RUNNER_TEMP"/python-distributions/* "$candidate/"
+          mv "$RUNNER_TEMP/documentation/InternalAppUpdates.doccarchive.zip" \
+            "$candidate/InternalAppUpdates-$RELEASE_VERSION.doccarchive.zip"
+          mv "$RUNNER_TEMP/documentation/InternalAppUpdates-documentation.zip" \
+            "$candidate/InternalAppUpdates-$RELEASE_VERSION-documentation.zip"
+          python Scripts/release.py create-manifest \
+            --repository "$GITHUB_REPOSITORY" \
+            --version "$RELEASE_VERSION" \
+            --sha "$CERTIFIED_SHA" \
+            --artifacts "$candidate"
+      - name: Validate retained candidate source run
+        if: inputs.candidate_run_id != ''
+        timeout-minutes: 2
+        env:
+          CERTIFIED_SHA: ${{ github.sha }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python Scripts/release.py validate-run \
+            --repository "$GITHUB_REPOSITORY" \
+            --version "$RELEASE_VERSION" \
+            --sha "$CERTIFIED_SHA" \
+            --candidate-run-id "$CANDIDATE_RUN_ID"
+      - name: Download retained candidate from prior run
+        if: inputs.candidate_run_id != ''
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-candidate-${{ inputs.version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/release-candidate
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_run_id }}
+      - name: Validate local candidate identity and bytes
+        timeout-minutes: 2
+        env:
+          CERTIFIED_SHA: ${{ github.sha }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python Scripts/release.py validate-manifest \
+            --repository "$GITHUB_REPOSITORY" \
+            --version "$RELEASE_VERSION" \
+            --sha "$CERTIFIED_SHA" \
+            --artifacts "$RUNNER_TEMP/release-candidate"
+      - name: Upload certified candidate
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: release-candidate-${{ inputs.version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/release-candidate
+          if-no-files-found: error
+          retention-days: 90
+
+  verify:
+    name: Verify downloaded candidate
+    needs: [support-audit, artifacts]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.15'
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-candidate-${{ inputs.version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/release-candidate
+      - name: Verify exact artifact set, digests, and destination
+        timeout-minutes: 5
+        env:
+          CERTIFIED_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python Scripts/release.py validate \
+            --repository "$GITHUB_REPOSITORY" \
+            --version "$RELEASE_VERSION" \
+            --sha "$CERTIFIED_SHA" \
+            --artifacts "$RUNNER_TEMP/release-candidate"
+
+  dry-run-complete:
+    name: Dry run complete
+    if: inputs.dry_run
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - run: echo 'The exact candidate passed validation. No release state was changed.'
+
+  publish:
+    name: Publish verified private release assets
+    if: ${{ !inputs.dry_run }}
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.15'
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-candidate-${{ inputs.version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/release-candidate
+      - name: Publish exact certified assets
+        timeout-minutes: 10
+        env:
+          CERTIFIED_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python Scripts/release.py publish \
+            --repository "$GITHUB_REPOSITORY" \
+            --version "$RELEASE_VERSION" \
+            --sha "$CERTIFIED_SHA" \
+            --artifacts "$RUNNER_TEMP/release-candidate" \
+            --receipt "$RUNNER_TEMP/publication-receipt.json"
+      - name: Retain publication receipt
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: release-receipt-${{ inputs.version }}-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/publication-receipt.json
+          if-no-files-found: warn
+          retention-days: 90

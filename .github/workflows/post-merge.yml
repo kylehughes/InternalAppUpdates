@@ -1,0 +1,37 @@
+name: Post-merge
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: post-merge-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  asan:
+    name: Post-merge / Apple ASan
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          persist-credentials: false
+      - name: Validate support declaration
+        timeout-minutes: 2
+        run: python3 Scripts/check-support.py
+      - name: Select current Apple toolchain
+        timeout-minutes: 2
+        run: Scripts/select-apple-toolchain.sh 26.6
+      - name: Controller and loader tests under ASan
+        timeout-minutes: 20
+        run: Scripts/test-sanitizers.sh address
