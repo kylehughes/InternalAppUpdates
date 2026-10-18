@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "internal-app-updates"
-version = "0.1.0"
+version = "0.1.1"
 description = "Publish signed iOS development builds to a portable HTTPS update feed"
 requires-python = ">=3.11"
 dependencies = []

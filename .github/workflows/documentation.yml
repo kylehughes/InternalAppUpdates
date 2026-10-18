@@ -1,19 +1,7 @@
-name: Build documentation
+name: Documentation
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: Git ref to document
-        required: true
-        default: main
-        type: string
-  workflow_call:
-    inputs:
-      ref:
-        description: Git ref to document
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -23,28 +11,104 @@ defaults:
     shell: bash
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.ref || github.ref }}
-  cancel-in-progress: true
+  group: deploy-documentation-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
-  documentation:
+  build_documentation:
+    name: Build Documentation
     runs-on: macos-26
     timeout-minutes: 20
+    outputs:
+      certified_sha: ${{ steps.release_target.outputs.sha }}
+    permissions:
+      contents: read
+      pages: read
+
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        timeout-minutes: 3
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - name: Select current Apple toolchain
+
+      - name: Verify release documentation target
+        id: release_target
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+
+          error() { printf '::error::%s\n' "$*" >&2; exit 1; }
+          [[ "$REF_TYPE" == tag ]] || error "Documentation must be dispatched from a tag, got $REF_TYPE $REF_NAME"
+          head_sha="$(git rev-parse HEAD)" || error 'Could not resolve checked-out HEAD'
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || error "Checked-out HEAD is not a lowercase full SHA: $head_sha"
+          python3 Scripts/check-release-documentation-target.py "$REF_NAME" "$head_sha"
+          printf 'sha=%s\n' "$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Select toolchain
         timeout-minutes: 2
-        run: Scripts/select-apple-toolchain.sh 26.6
-      - name: Build DocC archives
+        run: ./Scripts/select-apple-toolchain.sh 26.6
+
+      - name: Preflight
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+
+          actual_xcodebuild_version="$(xcodebuild -version)"
+          actual_swift_version="$(swift --version 2>&1 | head -n 1)"
+          xcodebuild_version="$(printf '%s\n' "$actual_xcodebuild_version" | paste -sd ' ' -)"
+          {
+            printf '### Environment\n\n'
+            printf -- '- Runner image: %s %s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+            printf -- '- OS: %s\n' "$(uname -a)"
+            printf -- '- Toolchain: %s; %s\n' "$xcodebuild_version" "$actual_swift_version"
+            printf -- '- Publication: DocC static site for GitHub Pages\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Build documentation site
         timeout-minutes: 14
-        run: Scripts/build-documentation.sh Artifacts/documentation
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        timeout-minutes: 3
+        run: Scripts/build-documentation.sh --site "$RUNNER_TEMP/InternalAppUpdates-site"
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          name: InternalAppUpdates-documentation
-          path: Artifacts/documentation
-          if-no-files-found: error
+          path: ${{ runner.temp }}/InternalAppUpdates-site
+          retention-days: 7
+
+  deploy_documentation:
+    name: Deploy Documentation
+    needs: build_documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      pages: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout certified release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build_documentation.outputs.certified_sha }}
+          persist-credentials: false
+
+      - name: Verify latest release documentation target
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ needs.build_documentation.outputs.certified_sha }}
+        run: python3 Scripts/check-release-documentation-target.py "$REF_NAME" "$SHA"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
