@@ -54,7 +54,7 @@ The publisher's signing validation and archive export require macOS. The Python 
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kylehughes/InternalAppUpdates.git", from: "0.1.1"),
+    .package(url: "https://github.com/kylehughes/InternalAppUpdates.git", from: "1.0.0"),
 ]
 ```
 
