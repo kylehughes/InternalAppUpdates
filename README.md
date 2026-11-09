@@ -310,3 +310,7 @@ reviewed its source code.
 [linkedin_url]: https://www.linkedin.com/in/kyle-hughes
 [mastodon_image]: https://img.shields.io/mastodon/follow/109356914477272810?domain=https%3A%2F%2Fmister.computer&style=social
 [mastodon_url]: https://mister.computer/@kyle
+
+## License
+
+Internal App Updates is available under the [MIT license](LICENSE).
