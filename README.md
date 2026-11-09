@@ -1,6 +1,8 @@
 # Internal App Updates
 
 [![Provenance: Software Factory](https://img.shields.io/badge/Provenance-Software_Factory-007AFF)](#provenance)
+[![Platform Versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fkylehughes%2FInternalAppUpdates%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/kylehughes/InternalAppUpdates)
+[![Swift Versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fkylehughes%2FInternalAppUpdates%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/kylehughes/InternalAppUpdates)
 [![CI](https://github.com/kylehughes/InternalAppUpdates/actions/workflows/ci.yml/badge.svg)](https://github.com/kylehughes/InternalAppUpdates/actions/workflows/ci.yml)
 
 *Publish signed internal iOS builds, share installation links, and offer updates inside your app.*
